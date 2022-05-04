@@ -5,18 +5,16 @@ import joi from "joi"
 import { MongoClient } from "mongodb";
 import dayjs from "dayjs";
 import dotenv from "dotenv"
-import cors from "cors";
 
 const app = express();
 dotenv.config();
-app.use(cors());
 app.use(express.json());
 app.use(cors());
 
 const port = process.env.PORT || 5000
 //CONEXÃO COM O BANCO DE DADOS
 let db = null;
-const mongoClient = new MongoClient("mongodb+srv://Douglas:qtGZ6YH63@Eq9tT@clusterdoug.oqldb.mongodb.net/ClusterDoug?retryWrites=true&w=majority;");
+const mongoClient = new MongoClient("mongodb+srv://Douglas:119046137@clusterdoug.oqldb.mongodb.net/ClusterDoug?retryWrites=true&w=majority;");
 const promise = mongoClient.connect();
 promise.then(response => {
 	db = mongoClient.db(process.env.BANCO);
@@ -25,7 +23,7 @@ promise.then(response => {
 promise.catch((e) => console.log("Não foi possível realizar a conexão com o banco", e));
 
 //Primeiro post falta realizar a conexão com o banco
-app.post("/participants", (req, res) => {
+app.post("/participants", async (req, res) => {
     const {name} = req.body;
     const lastStatus = Date.now();
     console.log(chalk.yellow.bold(name))
@@ -139,7 +137,47 @@ app.get("/messages", async (req, res) => {
   
   });
   
+//Ultimo post
+app.post("/status", async (req, res) => {
+    const { user } = req.headers; 
+    try {
+      const participante = await db.collection("participantes").findOne({ name: user });
+      if (!participante) return res.sendStatus(404);
   
-app.listen(port, () => {
-    console.log(chalk.bold.green(`Servidor em pé na porta ${port}`));
+      await db.collection("participantes").updateOne({ name: user }, { $set: { lastStatus: Date.now() } });
+      res.sendStatus(200);
+  
+    } catch (e) {
+      console.log("Erro ao atualizar status", e);
+      res.sendStatus(500)
+    }
+  });
+  
+  const TIME_TO_CHECK = 15 * 1000; 
+  setInterval(async () => {
+    console.log("removendo usuarios");
+    const segundos = Date.now() - (10 * 1000); 
+    try {
+      const  usuarioInativo = await db.collection("participantes").find({ lastStatus: { $lte: segundos } }).toArray();
+      if (usuarioInativo.length > 0) {
+        const mensagemInativa = usuarioInativo.map(usuarioInativo => {
+          return {
+            from: usuarioInativo.name,
+            to: 'Todos',
+            text: 'sai da sala...',
+            type: 'status',
+            time: dayjs().format("HH:mm:ss")
+          }
+        });
+  
+        await db.collection("mensagens").insertMany(mensagemInativa);
+        await db.collection("participantes").deleteMany({ lastStatus: { $lte: segundos } });
+      }
+    } catch (e) {
+      console.log("Erro ao remover usuários inativos!", e);
+      res.sendStatus(500);
+    }
+  }, TIME_TO_CHECK);
+app.listen(5000, () => {
+    console.log(chalk.bold.green(`Servidor em pé na porta 5000`));
 })
