@@ -112,7 +112,33 @@ app.post("/messages", async (req, res) => {
       return res.status(422).send("Você não existe!");
     }
   });
-
+//Segundo get agora das mensagens 
+app.get("/messages", async (req, res) => {
+    const limite = parseInt(req.query.limit);
+    const { user } = req.headers; //const user = req.header("User");
+  
+    try {
+      const messages = await db.collection("messages").find().toArray();
+      const mensagensFiltradas = messages.filter(message => {
+        const { from, to, type } = message;
+        const para = to === "Todos" || (to === user || from === user);
+        const publica = type === "message";
+  
+        return para || publica; 
+      });
+  
+      if (limite && limite !== NaN) {
+        return res.send(mensagensFiltradas.slice(-limite));
+      }
+  
+      res.send(mensagensFiltradas);
+    } catch (e) {
+      console.log("Erro ao obter mensagens", e);
+      res.sendStatus(500);
+    }
+  
+  });
+  
   
 app.listen(port, () => {
     console.log(chalk.bold.green(`Servidor em pé na porta ${port}`));
